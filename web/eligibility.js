@@ -9,7 +9,15 @@
  *       최종 판단은 반드시 공고문 원문을 따라야 한다.
  */
 
-// 2026년 도시근로자 가구원수별 월평균소득 100% (원)
+/* 1·2인 가구 소득기준 가산 (%p)
+ * 공공주택 소득기준은 1인가구 +20%p, 2인가구 +10%p를 가산해 적용한다.
+ * 검증: GH 다산진건데시앙 공고문(26.08.13) 실측값과 정확히 일치
+ *   1인 100% -> 3,813,363 x 1.20 = 4,576,036원 (공고문 표기값과 동일)
+ *   2인 100% -> 5,866,270 x 1.10 = 6,452,897원 (공고문 표기값과 동일)
+ * 위 공고문은 전용 60㎡ 초과 기준이며, 60㎡ 이하는 공고별로 다를 수 있다. */
+const SMALL_HH_BONUS = { 1: 20, 2: 10 };
+
+// 2026년 도시근로자 가구원수별 월평균소득 100% (원, 가산 적용 전 원값)
 const INCOME_100 = {
   1: 3813363,   // 105% 4,004,031 에서 역산
   2: 5866270,   // 70% 4,106,389 / 140% 8,212,778 교차검증
@@ -79,9 +87,13 @@ function judge(row, pref) {
   if (hit.single === null)
     return { v: 'ok', pct, msg: hit.note || '소득요건 없음' };
 
-  const limitPct = dual ? (hit.dual || hit.single) : hit.single;
+  const rawPct = dual ? (hit.dual || hit.single) : hit.single;
+  const bonus = SMALL_HH_BONUS[size] || 0;      // 1인 +20%p, 2인 +10%p
+  const limitPct = rawPct + bonus;
   const limit = base * limitPct / 100;
-  const label = `${hit.key} 한도 ${limitPct}% (${Math.round(limit).toLocaleString()}원)`;
+  const label = `${hit.key} 한도 ${rawPct}%`
+    + (bonus ? `+${bonus}%p(${size}인가구)=${limitPct}%` : '')
+    + ` (${Math.round(limit).toLocaleString()}원)`;
 
   if (inc <= limit * 0.95) return { v: 'ok', pct, msg: label };
   if (inc <= limit)        return { v: 'maybe', pct, msg: label + ' — 경계선, 산정방식 따라 갈림' };

@@ -33,6 +33,9 @@ jobs:
       - name: LH·SH·GH 수집 및 정적 빌드
         run: python build_static.py 3
 
+      - name: 회귀검사 (실패 시 배포 중단)
+        run: node test_regression.js
+
       - name: 수집 결과 요약
         run: |
           python - <<'EOF'
