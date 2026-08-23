@@ -9,7 +9,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -53,6 +53,24 @@ jobs:
           bad = [i for i in d['items'] if not (i['u'] or '').startswith('http')]
           print('링크 불량:', len(bad))
           EOF
+
+      # GitHub은 저장소가 60일간 조용하면 예약 워크플로를 자동으로 끈다.
+      # 수집 기록을 커밋해 활동을 남겨두면 cron이 계속 살아있다.
+      - name: 수집 기록 커밋 (예약 워크플로 자동정지 방지)
+        run: |
+          mkdir -p logs
+          BUILT=$(python -c "import json;print(json.load(open('dist/data.json',encoding='utf-8'))['built'])")
+          CNT=$(python -c "import json;print(json.load(open('dist/data.json',encoding='utf-8'))['count'])")
+          ERRN=$(python -c "import json;print(len(json.load(open('dist/data.json',encoding='utf-8')).get('errors') or []))")
+          STALE=$(python -c "import json;d=json.load(open('dist/data.json',encoding='utf-8'));print(','.join((d.get('stale') or {}).keys()) or '없음')")
+          echo "$BUILT | ${CNT}건 | 오류 ${ERRN} | 갱신지연 ${STALE}" >> logs/collect_history.md
+          tail -n 400 logs/collect_history.md > logs/history.tmp
+          mv logs/history.tmp logs/collect_history.md
+          git config user.name "gonggo-radar-bot"
+          git config user.email "actions@github.com"
+          git add logs/collect_history.md
+          git commit -m "수집 기록 ${BUILT}" || echo "변경 없음 - 커밋 생략"
+          git push || echo "push 생략"
 
       - uses: actions/upload-pages-artifact@v3
         with:

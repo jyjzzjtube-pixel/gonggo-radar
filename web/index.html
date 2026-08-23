@@ -260,6 +260,7 @@ const DEF={
 };
 let P = JSON.parse(localStorage.getItem('radar_pref')||'null') || structuredClone(DEF);
 let DATA=null, TAB='추천';
+var lastFetch=0;
 const LASTSEEN = localStorage.getItem('radar_seen')||'';
 const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
@@ -444,7 +445,15 @@ async function load(bust){
     const b=(DATA.built||'').replace('T',' ').slice(0,16);
     const st=DATA.stale||{};
     const stKeys=Object.keys(st);
-    $('#built').innerHTML=`3사 통합 <b>${DATA.count}</b>건 · 자동수집 ${b}`
+    // 마지막 수집이 몇 시간 전인지 계산해 신선도를 같이 보여준다
+    let age='';
+    try{
+      const t=new Date(DATA.built);
+      const h=Math.floor((Date.now()-t.getTime())/3600000);
+      age = h<1 ? ' <b>(방금)</b>' : (h<24 ? ` (${h}시간 전)`
+           : ` <span style="color:#a55a00">(${Math.floor(h/24)}일 전)</span>`);
+    }catch(e){}
+    $('#built').innerHTML=`3사 통합 <b>${DATA.count}</b>건 · 자동수집 ${b}${age}`
       + (stKeys.length?` · <span style="color:#a55a00">${stKeys.join('·')} 갱신지연</span>`:'')
       + (DATA.errors&&DATA.errors.length?` · <span style="color:#c81e1e">수집오류 ${DATA.errors.length}건</span>`:'');
     if(stKeys.length){
@@ -456,6 +465,7 @@ async function load(bust){
       document.querySelector('.bar').before(box);
     }
     render();
+    lastFetch=Date.now();
     const newest=DATA.items.map(x=>x.p||'').sort().pop()||'';
     if(newest) localStorage.setItem('radar_seen',newest);
   }catch(e){
@@ -465,6 +475,29 @@ async function load(bust){
 }
 load();
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+
+/* ── 자동 갱신 ────────────────────────────────────────────
+   서버(GitHub Actions)는 하루 3회 수집한다. 앱은 그 결과를 언제 가져오느냐가 문제다.
+   ① 앱을 열 때        -> load()
+   ② 앱으로 되돌아올 때 -> visibilitychange (홈 눌렀다 다시 열기 등)
+   ③ 켜둔 채 방치할 때  -> 10분마다, 단 화면이 보일 때만
+   ④ 네트워크 복구 시   -> online
+   버튼을 누를 필요가 없다. 새로고침(↻) 버튼은 즉시 확인용으로 남겨둔다. */
+lastFetch = Date.now();
+const REFRESH_MS = 10*60*1000;
+
+function autoRefresh(reason){
+  if(document.visibilityState !== 'visible') return;
+  if(Date.now() - lastFetch < 60*1000) return;   // 1분 내 중복 호출 방지
+  lastFetch = Date.now();
+  load(true);
+}
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState === 'visible') autoRefresh('foreground');
+});
+window.addEventListener('focus', ()=>autoRefresh('focus'));
+window.addEventListener('online', ()=>{ lastFetch = 0; autoRefresh('online'); });
+setInterval(()=>autoRefresh('interval'), REFRESH_MS);
 
 /* ── 앱 설치 ───────────────────────────────────────────────
    안드로이드(크롬·삼성인터넷): beforeinstallprompt 로 원터치 설치
