@@ -10,10 +10,25 @@ UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
 
 
-def _session():
+def _session(legacy_tls=False):
     s = requests.Session()
     s.headers.update({"User-Agent": UA, "Accept-Language": "ko-KR,ko;q=0.9"})
     s.verify = False
+    if legacy_tls:
+        # apply.gh.or.kr은 구형 TLS라 기본 설정으로는 핸드셰이크가 실패한다.
+        import ssl
+        from requests.adapters import HTTPAdapter
+        from urllib3.util.ssl_ import create_urllib3_context
+
+        class _Legacy(HTTPAdapter):
+            def init_poolmanager(self, *a, **kw):
+                ctx = create_urllib3_context(ciphers="DEFAULT@SECLEVEL=1")
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl.CERT_NONE
+                ctx.options |= 0x4          # OP_LEGACY_SERVER_CONNECT
+                kw["ssl_context"] = ctx
+                return super().init_poolmanager(*a, **kw)
+        s.mount("https://", _Legacy())
     return s
 
 
@@ -201,7 +216,73 @@ def collect_gh(pages=3, sleep=0.6, log=print):
     return out
 
 
-COLLECTORS = [("LH", collect_lh), ("SH", collect_sh), ("GH", collect_gh)]
+# ------------------------ GH 청약센터 (apply.gh.or.kr) ------------------------
+# gh.or.kr(본사 공고게시판)과 별개 시스템이다. 실제 임대주택 청약 공고는 여기에만 있다.
+GHA_BASE = "https://apply.gh.or.kr"
+GHA_LISTS = [
+    ("임대주택", "/sb/sr/sr7150/selectPbancRentHouseList.do"),
+    ("매입임대", "/sb/sr/sr7155/selectPbancRentHouseList.do"),
+    ("임대상가", "/sb/sr/sr7170/selectPbancRentSopsrtList.do"),
+]
+_DATE2 = re.compile(r"(\d{4}-\d{2}-\d{2})")
+
+
+def collect_gh_apply(pages=1, sleep=0.6, log=print):
+    s = _session(legacy_tls=True)
+    s.headers["Referer"] = GHA_BASE + "/co/coa/selectMainView.do"
+    out = []
+    for name, path in GHA_LISTS:
+        try:
+            r = s.get(GHA_BASE + path, timeout=40)
+            r.encoding = r.apparent_encoding or "utf-8"
+        except Exception as e:
+            log("  [GH청약 %s] ERR %s" % (name, e))
+            continue
+        tb = _pick_table(BeautifulSoup(r.text, "html.parser"), ["공고명", "지역"])
+        if tb is None:
+            log("  [GH청약 %s] 표 없음" % name)
+            continue
+        got = 0
+        for tr in tb.find_all("tr"):
+            tds = tr.find_all("td", recursive=False)
+            if len(tds) < 4:
+                continue
+            title = tds[2].get_text(" ", strip=True)
+            if not title:
+                continue
+            # 4번째 칸에 지역·게시일·마감일·상태가 한 덩어리로 들어온다
+            rest = tds[3].get_text(" ", strip=True)
+            dates = _DATE2.findall(rest)
+            posted = dates[0] if dates else ""
+            deadline = dates[1] if len(dates) > 1 else ""
+            region = rest.split()[0] if rest.split() else "경기도"
+            status = ""
+            for k in ("공고중", "접수마감", "접수예정", "접수중"):
+                if k in rest:
+                    status = k
+                    break
+            a = tr.find("a")
+            href = GHA_BASE + path
+            if a is not None and a.get("data-pbancno"):
+                href = (GHA_BASE + "/sb/sr/sr7150/selectPbancDetailView.do"
+                        "?pbancNo=%s&pbancKndCd=%s"
+                        % (a.get("data-pbancno"), a.get("data-pbanckndcd", "01")))
+            out.append(dict(
+                agency="GH", menu="청약센터·" + name,
+                category=tds[1].get_text(strip=True) or name,
+                title=title,
+                region_hint=region if region.endswith(("시", "군", "구", "도")) else "경기도",
+                posted=posted, deadline=deadline, status=status,
+                url=href,
+            ))
+            got += 1
+        log("  [GH청약 %s] %d건" % (name, got))
+        time.sleep(sleep)
+    return out
+
+
+COLLECTORS = [("LH", collect_lh), ("SH", collect_sh), ("GH", collect_gh),
+              ("GH청약센터", collect_gh_apply)]
 
 
 def collect_all(pages=3, log=print):
