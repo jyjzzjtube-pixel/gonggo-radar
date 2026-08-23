@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f1216">
+<title>공공공고 레이더</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+:root{
+  --bg:#0f1216;--panel:#171d25;--panel2:#1f2732;--line:#2b3441;
+  --tx:#e8eef5;--tx2:#9aa8b6;--tx3:#6b7a8a;
+  --acc:#3b82f6;--acc2:#60a5fa;--hot:#ef4444;--warn:#f59e0b;--ok:#22c55e;
+  --lh:#0ea5e9;--sh:#a855f7;--gh:#14b8a6;
+  --safe-t:env(safe-area-inset-top,0px);--safe-b:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{background:var(--bg);color:var(--tx);font:15px/1.55 -apple-system,"Pretendard","Apple SD Gothic Neo","맑은 고딕",Roboto,sans-serif;
+     padding-bottom:calc(70px + var(--safe-b))}
+a{color:inherit;text-decoration:none}
+header{position:sticky;top:0;z-index:30;background:rgba(15,18,22,.94);backdrop-filter:blur(12px);
+       border-bottom:1px solid var(--line);padding:calc(11px + var(--safe-t)) 15px 11px}
+.hrow{display:flex;align-items:center;gap:10px}
+.hrow h1{font-size:17px;font-weight:800;letter-spacing:-.4px;flex:1}
+.hrow h1 i{font-style:normal;color:var(--acc2)}
+.built{font-size:11px;color:var(--tx3);margin-top:3px}
+.built b{color:var(--ok)}
+.iconbtn{background:var(--panel2);border:1px solid var(--line);color:var(--tx2);width:34px;height:34px;
+         border-radius:9px;font-size:15px;display:grid;place-items:center;cursor:pointer}
+.iconbtn:active{background:var(--acc);color:#fff}
+
+.tabs{display:flex;gap:6px;overflow-x:auto;padding:11px 15px 0;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:none;padding:7px 14px;border-radius:999px;border:1px solid var(--line);background:var(--panel2);
+     color:var(--tx2);font-size:13px;cursor:pointer;white-space:nowrap}
+.tab.on{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:700}
+
+.bar{display:flex;align-items:center;gap:9px;padding:11px 15px 4px;font-size:12.5px;color:var(--tx2)}
+.bar b{color:var(--tx);font-size:15px}
+.bar .sp{flex:1}
+.sel{background:var(--panel2);border:1px solid var(--line);color:var(--tx2);border-radius:7px;
+     padding:5px 8px;font:inherit;font-size:12.5px}
+
+.list{padding:8px 12px}
+.card{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--line);
+      border-radius:12px;padding:13px 14px;margin-bottom:9px;display:block}
+.card:active{background:var(--panel2)}
+.card.LH{border-left-color:var(--lh)}.card.SH{border-left-color:var(--sh)}.card.GH{border-left-color:var(--gh)}
+.top{display:flex;align-items:center;gap:7px;margin-bottom:7px;flex-wrap:wrap}
+.ag{font-size:11px;font-weight:800;color:#fff;padding:2px 8px;border-radius:5px}
+.ag.LH{background:var(--lh)}.ag.SH{background:var(--sh)}.ag.GH{background:var(--gh)}
+.sc{font-size:11px;font-weight:800;padding:2px 8px;border-radius:5px;border:1px solid}
+.sc.a{color:#22c55e;border-color:#1d5c33;background:#0f2417}
+.sc.b{color:#a3e635;border-color:#4d5c1d;background:#1b2410}
+.sc.c{color:#f59e0b;border-color:#68491a;background:#241c0f}
+.sc.d{color:var(--tx3);border-color:var(--line)}
+.new{font-size:10px;font-weight:800;color:#fff;background:var(--hot);padding:2px 6px;border-radius:5px}
+.dd{margin-left:auto;font-size:13px;font-weight:800}
+.dd.hot{color:var(--hot)}.dd.warn{color:var(--warn)}.dd.ok{color:var(--tx2)}.dd.na{color:var(--tx3);font-size:11.5px;font-weight:600}
+.ttl{font-size:14.5px;font-weight:650;line-height:1.45;margin-bottom:8px;word-break:keep-all}
+.tags{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:7px}
+.tg{font-size:11px;padding:2px 8px;border-radius:5px;background:var(--panel2);border:1px solid var(--line);color:var(--tx2)}
+.tg.rg{color:var(--acc2);border-color:#2c4a7c}
+.tg.ql{color:#fca5a5;border-color:#5b2c2c}
+.why{font-size:11px;color:var(--tx3);line-height:1.6}
+.dts{font-size:11px;color:var(--tx3);margin-top:6px;display:flex;gap:12px}
+.empty{text-align:center;color:var(--tx3);padding:60px 20px;font-size:13.5px;line-height:1.8}
+
+/* 조건 설정 시트 */
+.sheet{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:50;display:none}
+.sheet.on{display:block}
+.sheetin{position:absolute;left:0;right:0;bottom:0;max-height:88vh;overflow-y:auto;background:var(--panel);
+         border-radius:18px 18px 0 0;padding:18px 16px calc(24px + var(--safe-b));border-top:1px solid var(--line)}
+.sheetin h2{font-size:16px;font-weight:800;margin-bottom:4px}
+.sheetin p.sub{font-size:12px;color:var(--tx3);margin-bottom:16px;line-height:1.6}
+.sheetin h4{font-size:11.5px;letter-spacing:.5px;color:var(--tx3);margin:16px 0 8px;text-transform:uppercase}
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chip{border:1px solid var(--line);background:var(--panel2);color:var(--tx2);border-radius:8px;
+      padding:7px 12px;font-size:13px;cursor:pointer;user-select:none}
+.chip.on{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:700}
+.btn{width:100%;background:var(--acc);border:0;color:#fff;font:inherit;font-weight:700;font-size:15px;
+     padding:14px;border-radius:11px;margin-top:20px;cursor:pointer}
+.btn.gh{background:var(--panel2);border:1px solid var(--line);color:var(--tx2);margin-top:9px}
+.regrow{display:flex;gap:7px;margin-bottom:7px}
+.regrow input{flex:1;background:var(--panel2);border:1px solid var(--line);color:var(--tx);
+              border-radius:8px;padding:9px 11px;font:inherit;font-size:13.5px}
+.warnbox{background:#1a1508;border:1px solid #55430f;color:#dcc287;border-radius:10px;
+         padding:10px 12px;font-size:11.5px;line-height:1.6;margin:0 12px 10px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hrow">
+    <h1>공공공고 <i>레이더</i></h1>
+    <button class="iconbtn" id="btnReload" title="새로고침">&#8635;</button>
+    <button class="iconbtn" id="btnPref" title="내 조건">&#9881;</button>
+  </div>
+  <div class="built" id="built">불러오는 중…</div>
+  <div class="tabs" id="tabs"></div>
+</header>
+
+<div class="warnbox" id="warnbox"></div>
+
+<div class="bar">
+  <span><b id="cnt">0</b>건</span>
+  <span class="sp"></span>
+  <select class="sel" id="days">
+    <option value="30">최근 1개월</option>
+    <option value="90" selected>최근 3개월</option>
+    <option value="180">최근 6개월</option>
+    <option value="0">전체</option>
+  </select>
+  <select class="sel" id="minsc">
+    <option value="0">전체 표시</option>
+    <option value="40" selected>적합 40+</option>
+    <option value="60">적합 60+</option>
+    <option value="80">적합 80+</option>
+  </select>
+</div>
+
+<div class="list" id="list"></div>
+
+<!-- 조건 설정 -->
+<div class="sheet" id="sheet">
+  <div class="sheetin">
+    <h2>내 조건</h2>
+    <p class="sub">이 조건은 이 기기에만 저장됩니다(서버 전송 없음). 조건에 맞을수록 위로 올라옵니다.</p>
+
+    <h4>희망 지역 — 시군구</h4>
+    <div class="regrow"><input id="regIn" placeholder="예: 구리, 남양주, 중랑"><button class="iconbtn" id="regAdd">+</button></div>
+    <div class="chips" id="pRegions"></div>
+
+    <h4>거래 유형</h4><div class="chips" id="pDeals"></div>
+    <h4>자격 (해당되는 것)</h4><div class="chips" id="pQuals"></div>
+    <h4>기관</h4><div class="chips" id="pAgency"></div>
+
+    <button class="btn" id="btnSave">저장</button>
+    <button class="btn gh" id="btnClose">닫기</button>
+  </div>
+</div>
+
+<script>
+const DEALS=["임대(전세)","임대(월세)","매매(분양·매각)","상가·업무","토지","기타"];
+const QUALS=["신혼·신생아","청년","다자녀","고령자","장애인","저소득","일반"];
+const AGENCIES=["LH","SH","GH"];
+const SIDO_OF={"구리":"경기","남양주":"경기","의정부":"경기","중랑":"서울","광진":"서울",
+  "동대문":"서울","노원":"서울","성남":"경기","수원":"경기","하남":"경기","고양":"경기","용인":"경기"};
+
+// 기본 조건 (첫 실행 시)
+const DEF={
+  regions:["구리","남양주","의정부","중랑","광진","동대문","노원"],
+  deals:["임대(전세)","임대(월세)","매매(분양·매각)"],
+  quals:["신혼·신생아","청년","일반"],
+  agency:[]
+};
+let P = JSON.parse(localStorage.getItem('radar_pref')||'null') || structuredClone(DEF);
+let DATA=null, TAB='추천';
+const LASTSEEN = localStorage.getItem('radar_seen')||'';
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+
+function dday(d){ if(!d) return null;
+  const t=new Date(d+'T00:00:00'), n=new Date(); n.setHours(0,0,0,0);
+  return Math.round((t-n)/864e5); }
+
+// 서버(store.py match_score)와 동일한 규칙
+function score(r){
+  let s=0, why=[];
+  const gu=r.gu||'', sd=r.sd||'';
+  if(P.regions.length){
+    const wantSido=[...new Set(P.regions.map(g=>SIDO_OF[g]).filter(Boolean))];
+    const exact=P.regions.some(g=>g&&gu.includes(g));
+    const sidoOk=wantSido.includes(sd);
+    if(exact){ s+=45; why.push(`희망 시군구 일치(${sd} ${gu})`); }
+    else if(sidoOk&&!gu){ s+=22; why.push(`희망 시도 일치·시군구 미상(${sd})`); }
+    else if(sidoOk&&gu){ s+=6; why.push(`희망 시도지만 타 시군구(${sd} ${gu})`); }
+    else if(sd==='전국'||!sd){ s+=8; why.push('전국/지역미상'); }
+    else { s-=20; why.push(`희망지역 밖(${sd} ${gu})`); }
+  } else s+=20;
+
+  if(!P.deals.length||P.deals.includes(r.dl)){ s+=20; why.push(`거래유형 ${r.dl}`); }
+  else { s-=40; why.push(`※제외대상(${r.dl})`); }
+
+  const hit=(r.q||[]).filter(q=>P.quals.includes(q));
+  if(hit.length){ s+= hit.some(h=>h!=='일반')?20:10; why.push('자격 '+hit.join('/')); }
+
+  if(r.k==='결과발표'){ s-=25; why.push('※결과발표'); }
+  else if(r.k==='모집공고'){ s+=10; why.push('모집공고'); }
+
+  const dd=dday(r.d);
+  if(dd!==null){
+    if(dd<0){ s-=30; why.push(`마감(${-dd}일 경과)`); }
+    else if(dd<=7){ s+=15; why.push(`D-${dd} 마감임박`); }
+    else { s+=8; why.push(`D-${dd}`); }
+  } else if(['공고중','접수중'].includes(r.s||'')){ s+=10; why.push('공고중'); }
+
+  return [Math.max(0,Math.min(100,s)), why];
+}
+
+const TABS=[
+  ['추천',   r=>true],
+  ['마감임박', r=>{const d=dday(r.d); return d!==null&&d>=0&&d<=10;}],
+  ['임대',   r=>r.dl.startsWith('임대')],
+  ['매매·분양', r=>r.dl.startsWith('매매')],
+  ['상가',   r=>r.dl==='상가·업무'],
+  ['토지',   r=>r.dl==='토지'],
+  ['전체',   r=>true],
+];
+
+function render(){
+  if(!DATA) return;
+  const days=+$('#days').value, minsc=+$('#minsc').value;
+  const cut = days ? new Date(Date.now()-days*864e5).toISOString().slice(0,10) : '';
+  const tabFn = (TABS.find(t=>t[0]===TAB)||TABS[0])[1];
+
+  let rows = DATA.items.filter(r=>{
+    if(cut && (r.p||'') < cut) return false;
+    if(P.agency.length && !P.agency.includes(r.ag)) return false;
+    if(TAB!=='전체' && r.k==='결과발표') return false;
+    const dd=dday(r.d);
+    if(TAB!=='전체' && dd!==null && dd<0) return false;
+    return tabFn(r);
+  }).map(r=>{ const [s,w]=score(r); return {...r, _s:s, _w:w, _d:dday(r.d)}; });
+
+  if(TAB!=='전체') rows=rows.filter(r=>r._s>=minsc);
+  rows.sort((a,b)=> b._s-a._s || (b.p||'').localeCompare(a.p||''));
+
+  $('#cnt').textContent=rows.length;
+  const na=rows.filter(r=>r._d===null).length;
+  $('#warnbox').style.display = na? 'block':'none';
+  $('#warnbox').innerHTML = na? `SH·GH는 목록에 마감일이 없어 <b>${na}건이 마감일 미상</b>입니다. 카드를 눌러 원문에서 접수기간을 확인하세요. LH는 D-day가 정확합니다.`:'';
+
+  if(!rows.length){ $('#list').innerHTML='<div class="empty">조건에 맞는 공고가 없습니다.<br>기간을 늘리거나 적합도 기준을 낮춰보세요.</div>'; return; }
+
+  $('#list').innerHTML = rows.slice(0,300).map(r=>{
+    let dd,cls;
+    if(r._d===null){dd='마감일 미상';cls='na';}
+    else if(r._d<=3){dd='D-'+r._d;cls='hot';}
+    else if(r._d<=10){dd='D-'+r._d;cls='warn';}
+    else {dd='D-'+r._d;cls='ok';}
+    const g=r._s>=80?'a':r._s>=60?'b':r._s>=40?'c':'d';
+    const isNew = LASTSEEN && (r.p||'')>LASTSEEN;
+    const reg=[r.sd,r.gu].filter(Boolean).join(' ')||'지역미상';
+    return `<a class="card ${r.ag}" href="${esc(r.u)}" target="_blank" rel="noopener">
+      <div class="top">
+        <span class="ag ${r.ag}">${r.ag}</span>
+        <span class="sc ${g}">적합 ${r._s}</span>
+        ${isNew?'<span class="new">NEW</span>':''}
+        <span class="dd ${cls}">${dd}</span>
+      </div>
+      <div class="ttl">${esc(r.t)}</div>
+      <div class="tags">
+        <span class="tg rg">${esc(reg)}</span>
+        <span class="tg">${esc(r.dl)}</span>
+        ${r.ht?`<span class="tg">${esc(r.ht)}</span>`:''}
+        ${(r.q||[]).map(q=>`<span class="tg ql">${esc(q)}</span>`).join('')}
+      </div>
+      <div class="why">${r._w.map(esc).join(' · ')}</div>
+      <div class="dts"><span>게시 ${esc(r.p||'-')}</span>${r.d?`<span>마감 ${esc(r.d)}</span>`:''}</div>
+    </a>`;
+  }).join('');
+}
+
+function chips(el,items,arr,onChange){
+  el.innerHTML=items.map(v=>`<div class="chip${arr.includes(v)?' on':''}" data-v="${esc(v)}">${esc(v)}</div>`).join('');
+  el.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{
+    const v=c.dataset.v, i=arr.indexOf(v);
+    if(i<0) arr.push(v); else arr.splice(i,1);
+    c.classList.toggle('on'); if(onChange) onChange();
+  });
+}
+
+function drawPref(){
+  const el=$('#pRegions');
+  el.innerHTML=P.regions.map(v=>`<div class="chip on" data-v="${esc(v)}">${esc(v)} ✕</div>`).join('');
+  el.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{
+    P.regions.splice(P.regions.indexOf(c.dataset.v),1); drawPref();
+  });
+  chips($('#pDeals'),DEALS,P.deals);
+  chips($('#pQuals'),QUALS,P.quals);
+  chips($('#pAgency'),AGENCIES,P.agency);
+}
+
+$('#tabs').innerHTML=TABS.map((t,i)=>`<div class="tab${i===0?' on':''}" data-t="${t[0]}">${t[0]}</div>`).join('');
+$('#tabs').querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
+  $('#tabs').querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
+  t.classList.add('on'); TAB=t.dataset.t; render(); window.scrollTo(0,0);
+});
+$('#days').onchange=render; $('#minsc').onchange=render;
+$('#btnPref').onclick=()=>{drawPref();$('#sheet').classList.add('on');};
+$('#btnClose').onclick=()=>$('#sheet').classList.remove('on');
+$('#btnSave').onclick=()=>{
+  localStorage.setItem('radar_pref',JSON.stringify(P));
+  $('#sheet').classList.remove('on'); render();
+};
+$('#regAdd').onclick=()=>{
+  const v=$('#regIn').value.trim().replace(/(시|군|구)$/,'');
+  if(v&&!P.regions.includes(v)) P.regions.push(v);
+  $('#regIn').value=''; drawPref();
+};
+$('#regIn').onkeydown=e=>{ if(e.key==='Enter') $('#regAdd').click(); };
+$('#btnReload').onclick=()=>load(true);
+$('#sheet').onclick=e=>{ if(e.target.id==='sheet') $('#sheet').classList.remove('on'); };
+
+async function load(bust){
+  try{
+    const r=await fetch('data.json'+(bust?'?t='+Date.now():''),{cache:bust?'reload':'default'});
+    DATA=await r.json();
+    const b=(DATA.built||'').replace('T',' ').slice(0,16);
+    $('#built').innerHTML=`3사 통합 <b>${DATA.count}</b>건 · 자동수집 ${b}`
+      + (DATA.errors&&DATA.errors.length?` · <span style="color:#ef4444">수집오류 ${DATA.errors.length}건</span>`:'');
+    render();
+    const newest=DATA.items.map(x=>x.p||'').sort().pop()||'';
+    if(newest) localStorage.setItem('radar_seen',newest);
+  }catch(e){
+    $('#built').textContent='데이터를 불러오지 못했습니다: '+e.message;
+    $('#list').innerHTML='<div class="empty">데이터 로드 실패.<br>네트워크를 확인하고 새로고침(&#8635;)을 눌러주세요.</div>';
+  }
+}
+load();
+if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body>
+</html>

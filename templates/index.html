@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>공공공고 레이더 — LH · SH · GH 통합</title>
+<style>
+  :root{
+    --bg:#0f1216; --panel:#161b22; --panel2:#1c232c; --line:#2a323d;
+    --tx:#e6edf3; --tx2:#9aa7b4; --tx3:#6e7d8d;
+    --acc:#3b82f6; --acc2:#60a5fa;
+    --hot:#ef4444; --warn:#f59e0b; --ok:#22c55e; --lh:#0ea5e9; --sh:#a855f7; --gh:#14b8a6;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--tx);font:14px/1.55 "Pretendard","맑은 고딕",Segoe UI,sans-serif;min-width:1280px}
+  a{color:inherit;text-decoration:none}
+  header{display:flex;align-items:center;gap:18px;padding:14px 22px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
+  header h1{font-size:17px;font-weight:700;letter-spacing:-.3px}
+  header h1 span{color:var(--acc2)}
+  .hstat{color:var(--tx2);font-size:12.5px}
+  .hstat b{color:var(--tx)}
+  .grow{flex:1}
+  button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--panel2);color:var(--tx);
+         padding:7px 14px;border-radius:7px;transition:.12s}
+  button:hover{border-color:var(--acc);color:var(--acc2)}
+  button.pri{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+  button.pri:hover{background:var(--acc2);color:#fff}
+  button:disabled{opacity:.45;cursor:not-allowed}
+
+  .wrap{display:grid;grid-template-columns:290px 1fr;gap:0;height:calc(100vh - 57px)}
+  aside{background:var(--panel);border-right:1px solid var(--line);overflow-y:auto;padding:16px}
+  aside h3{font-size:11.5px;letter-spacing:.6px;color:var(--tx3);text-transform:uppercase;margin:18px 0 8px}
+  aside h3:first-child{margin-top:0}
+  .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{border:1px solid var(--line);background:var(--panel2);color:var(--tx2);border-radius:6px;
+        padding:5px 10px;font-size:12.5px;cursor:pointer;user-select:none;transition:.12s}
+  .chip:hover{border-color:var(--acc)}
+  .chip.on{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+  input[type=text],input[type=range],select{width:100%;background:var(--panel2);border:1px solid var(--line);
+        color:var(--tx);border-radius:6px;padding:8px 10px;font:inherit}
+  input[type=text]:focus{outline:none;border-color:var(--acc)}
+  label.sw{display:flex;align-items:center;gap:8px;padding:6px 0;color:var(--tx2);cursor:pointer;font-size:13px}
+  label.sw input{accent-color:var(--acc);width:15px;height:15px;cursor:pointer}
+  .prefbox{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:11px;font-size:12.5px;color:var(--tx2);line-height:1.7}
+  .prefbox b{color:var(--acc2)}
+
+  main{overflow-y:auto;padding:18px 22px}
+  .toolbar{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+  .toolbar .cnt{font-size:13px;color:var(--tx2)}
+  .toolbar .cnt b{color:var(--tx);font-size:16px}
+  .card{display:grid;grid-template-columns:62px 1fr 128px;gap:14px;align-items:start;
+        background:var(--panel);border:1px solid var(--line);border-left-width:3px;border-radius:9px;
+        padding:13px 15px;margin-bottom:9px;transition:.12s}
+  .card:hover{border-color:var(--acc);background:var(--panel2)}
+  .card.lh{border-left-color:var(--lh)} .card.sh{border-left-color:var(--sh)} .card.gh{border-left-color:var(--gh)}
+  .score{text-align:center}
+  .score .n{font-size:23px;font-weight:800;line-height:1.1}
+  .score .l{font-size:10px;color:var(--tx3);letter-spacing:.4px}
+  .s90{color:#22c55e}.s70{color:#84cc16}.s55{color:#f59e0b}.s0{color:var(--tx3)}
+  .ttl{font-size:14.5px;font-weight:600;margin-bottom:6px;line-height:1.45}
+  .ttl:hover{color:var(--acc2)}
+  .meta{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
+  .tag{font-size:11.5px;padding:2px 8px;border-radius:5px;background:var(--panel2);border:1px solid var(--line);color:var(--tx2)}
+  .tag.ag{font-weight:700;color:#fff;border:0}
+  .tag.ag.LH{background:var(--lh)}.tag.ag.SH{background:var(--sh)}.tag.ag.GH{background:var(--gh)}
+  .tag.rg{color:var(--acc2);border-color:#2c4a7c}
+  .tag.dl{color:#fca5a5;border-color:#5b2c2c}
+  .why{font-size:11.5px;color:var(--tx3);line-height:1.6}
+  .right{text-align:right}
+  .dd{font-size:15px;font-weight:800}
+  .dd.hot{color:var(--hot)}.dd.warn{color:var(--warn)}.dd.ok{color:var(--tx2)}.dd.na{color:var(--tx3);font-size:12px;font-weight:500}
+  .dt{font-size:11.5px;color:var(--tx3);margin-top:3px}
+  .open{display:inline-block;margin-top:7px;font-size:11.5px;color:var(--acc2);border:1px solid #2c4a7c;border-radius:5px;padding:3px 9px}
+  .open:hover{background:var(--acc);color:#fff}
+  .empty{text-align:center;color:var(--tx3);padding:70px 0}
+  #log{position:fixed;right:18px;bottom:18px;width:430px;max-height:250px;overflow:auto;background:#0b0e12;
+       border:1px solid var(--line);border-radius:9px;padding:12px;font:11.5px/1.6 Consolas,monospace;
+       color:var(--tx2);display:none;z-index:50;box-shadow:0 10px 40px rgba(0,0,0,.6)}
+  .notice{background:#1a1508;border:1px solid #55430f;color:#e0c98a;border-radius:8px;padding:10px 13px;
+          font-size:12.5px;margin-bottom:13px;line-height:1.6}
+</style>
+</head>
+<body>
+<header>
+  <h1>공공공고 <span>레이더</span></h1>
+  <div class="hstat" id="hstat">불러오는 중…</div>
+  <div class="grow"></div>
+  <button id="btnCollect" class="pri">3사 새로고침</button>
+  <button onclick="document.getElementById('log').style.display='block'">수집로그</button>
+</header>
+
+<div class="wrap">
+  <aside>
+    <h3>내 조건</h3>
+    <div class="prefbox" id="prefbox">…</div>
+    <label class="sw"><input type="checkbox" id="useMine" checked> 내 조건 적합도 순 정렬</label>
+
+    <h3>기관</h3><div class="chips" id="fAgency"></div>
+    <h3>거래유형</h3><div class="chips" id="fDeal"></div>
+    <h3>지역(시도)</h3><div class="chips" id="fSido"></div>
+
+    <h3>최소 적합도 <span id="msLbl" style="color:var(--acc2)">40</span>점</h3>
+    <input type="range" id="minScore" min="0" max="100" step="5" value="40">
+
+    <h3>게시 기간</h3>
+    <select id="days">
+      <option value="30">최근 1개월</option>
+      <option value="90" selected>최근 3개월</option>
+      <option value="180">최근 6개월</option>
+      <option value="0">전체 기간</option>
+    </select>
+
+    <h3>옵션</h3>
+    <label class="sw"><input type="checkbox" id="hideRes" checked> 결과발표·당첨자 공고 숨김</label>
+    <label class="sw"><input type="checkbox" id="openOnly" checked> 마감 지난 공고 숨김</label>
+
+    <h3>키워드</h3>
+    <input type="text" id="q" placeholder="예: 신혼, 행복주택, 구리">
+
+    <h3>&nbsp;</h3>
+    <button class="pri" style="width:100%" id="btnSearch">검색</button>
+  </aside>
+
+  <main>
+    <div class="notice" id="warn"></div>
+    <div class="toolbar">
+      <div class="cnt"><b id="cnt">0</b>건</div>
+      <div class="grow"></div>
+      <div class="hstat" id="sub"></div>
+    </div>
+    <div id="list"></div>
+  </main>
+</div>
+<div id="log"></div>
+
+<script>
+const S = {agency:[], deal:[], sido:[], pref:null, meta:null};
+const $ = s => document.querySelector(s);
+
+function chips(el, items, key){
+  el.innerHTML = items.map(v=>`<div class="chip" data-v="${v}">${v}</div>`).join('');
+  el.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{
+    c.classList.toggle('on');
+    const v=c.dataset.v, i=S[key].indexOf(v);
+    if(i<0) S[key].push(v); else S[key].splice(i,1);
+    search();
+  });
+}
+
+async function boot(){
+  S.meta = await (await fetch('/api/meta')).json();
+  S.pref = await (await fetch('/api/pref')).json();
+  chips($('#fAgency'), S.meta.agencies, 'agency');
+  chips($('#fDeal'), S.meta.deals, 'deal');
+  chips($('#fSido'), ['서울','경기','인천','전국'], 'sido');
+  const p=S.pref, rg=p.regions.map(r=>r.sido+' '+r.sigungu).join(' · ');
+  $('#prefbox').innerHTML =
+    `<b>${p.name}</b><br>${p.note}<br>`+
+    `<b>희망지역</b> ${rg}<br>`+
+    `<b>거래</b> ${p.deals.join(' / ')}<br>`+
+    `<b>자격</b> ${p.quals.join(' / ')}`;
+  const lr=S.meta.last_run;
+  $('#hstat').innerHTML = `DB <b>${S.meta.stats.total}</b>건 · 최근수집 <b>${lr?lr.finished.replace('T',' '):'없음'}</b>`;
+  search();
+}
+
+async function search(){
+  const f = {
+    agency:S.agency.length?S.agency:null, deal:S.deal.length?S.deal:null,
+    sido:S.sido.length?S.sido:null, q:$('#q').value.trim()||null,
+    hide_results:$('#hideRes').checked, open_only:$('#openOnly').checked,
+    days: +$('#days').value || null,
+    min_score:$('#useMine').checked ? +$('#minScore').value : 0
+  };
+  const body = {filters:f, pref:$('#useMine').checked ? S.pref : null, limit:400};
+  const r = await (await fetch('/api/search',{method:'POST',headers:{'Content-Type':'application/json'},
+                   body:JSON.stringify(body)})).json();
+  render(r.rows); $('#cnt').textContent = r.count;
+  const na = r.rows.filter(x=>x.dday===null).length;
+  $('#sub').textContent = na ? `※ ${na}건은 목록에 마감일이 없어 원문 확인 필요` : '';
+}
+
+function sc(n){ return n>=90?'s90':n>=70?'s70':n>=55?'s55':'s0'; }
+
+function render(rows){
+  if(!rows.length){ $('#list').innerHTML='<div class="empty">조건에 맞는 공고가 없습니다. 최소 적합도를 낮추거나 필터를 푸세요.</div>'; return; }
+  $('#list').innerHTML = rows.map(r=>{
+    let dd, cls;
+    if(r.dday===null){ dd='마감일 미상'; cls='na'; }
+    else if(r.dday<0){ dd='마감'; cls='ok'; }
+    else if(r.dday<=3){ dd='D-'+r.dday; cls='hot'; }
+    else if(r.dday<=10){ dd='D-'+r.dday; cls='warn'; }
+    else { dd='D-'+r.dday; cls='ok'; }
+    const reg=[r.sido,r.sigungu].filter(Boolean).join(' ')||'지역미상';
+    return `<div class="card ${r.agency.toLowerCase()}">
+      <div class="score"><div class="n ${sc(r.score)}">${r.score}</div><div class="l">적합도</div></div>
+      <div>
+        <div class="ttl">${esc(r.title)}</div>
+        <div class="meta">
+          <span class="tag ag ${r.agency}">${r.agency}</span>
+          <span class="tag rg">${esc(reg)}</span>
+          <span class="tag">${esc(r.deal)}</span>
+          ${r.house_type?`<span class="tag">${esc(r.house_type)}</span>`:''}
+          ${(r.quals||[]).map(q=>`<span class="tag dl">${esc(q)}</span>`).join('')}
+          <span class="tag">${esc(r.kind)}</span>
+        </div>
+        <div class="why">${(r.why||[]).map(esc).join(' · ')}</div>
+      </div>
+      <div class="right">
+        <div class="dd ${cls}">${dd}</div>
+        <div class="dt">게시 ${r.posted||'-'}</div>
+        ${r.deadline?`<div class="dt">마감 ${r.deadline}</div>`:''}
+        ${r.url?`<a class="open" href="${r.url}" target="_blank">원문 열기</a>`:''}
+      </div></div>`;
+  }).join('');
+}
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m])); }
+
+$('#btnSearch').onclick = search;
+$('#q').onkeydown = e => { if(e.key==='Enter') search(); };
+['hideRes','openOnly','useMine','days'].forEach(id=>$('#'+id).onchange=search);
+$('#minScore').oninput = e => { $('#msLbl').textContent = e.target.value; };
+$('#minScore').onchange = search;
+
+$('#btnCollect').onclick = async ()=>{
+  const b=$('#btnCollect'); b.disabled=true; b.textContent='수집 중…';
+  $('#log').style.display='block';
+  await fetch('/api/collect',{method:'POST',headers:{'Content-Type':'application/json'},body:'{"pages":3}'});
+  const t=setInterval(async()=>{
+    const s=await (await fetch('/api/collect/status')).json();
+    $('#log').innerHTML=s.log.slice(-40).map(esc).join('<br>');
+    $('#log').scrollTop=1e6;
+    if(!s.running){ clearInterval(t); b.disabled=false; b.textContent='3사 새로고침';
+      S.meta=await (await fetch('/api/meta')).json();
+      $('#hstat').innerHTML=`DB <b>${S.meta.stats.total}</b>건 · 최근수집 <b>${S.meta.last_run.finished.replace('T',' ')}</b>`;
+      search(); }
+  },1500);
+};
+$('#log').ondblclick=()=>$('#log').style.display='none';
+$('#warn').innerHTML='SH·GH 목록 페이지에는 마감일 컬럼이 없습니다. 해당 건은 <b>마감일 미상</b>으로 표시되며 원문에서 접수기간을 확인하셔야 합니다. LH는 마감일이 목록에 제공되어 D-day가 정확합니다.';
+boot();
+</script>
+</body>
+</html>

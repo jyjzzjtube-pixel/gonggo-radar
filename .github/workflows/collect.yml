@@ -1,0 +1,59 @@
+name: 공고 수집 및 배포
+
+on:
+  schedule:
+    # KST 07:00 / 13:00 / 19:00 (UTC 22:00 / 04:00 / 10:00)
+    - cron: "0 22,4,10 * * *"
+  workflow_dispatch:      # 버튼으로 수동 즉시 수집
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 의존성 설치
+        run: pip install requests beautifulsoup4
+
+      - name: LH·SH·GH 수집 및 정적 빌드
+        run: python build_static.py 3
+
+      - name: 수집 결과 요약
+        run: |
+          python - <<'EOF'
+          import json
+          d = json.load(open('dist/data.json', encoding='utf-8'))
+          print('수집 %d건 / 빌드 %s' % (d['count'], d['built']))
+          print('오류:', d['errors'] or '없음')
+          bad = [i for i in d['items'] if not (i['u'] or '').startswith('http')]
+          print('링크 불량:', len(bad))
+          EOF
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
