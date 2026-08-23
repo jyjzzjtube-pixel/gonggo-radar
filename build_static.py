@@ -70,6 +70,15 @@ def build(pages=3):
                     stale[a] = {"count": len(keep), "asof": prev.get("built", "")}
                     log("    %s %d건 복원 (기준 %s)" % (a, len(keep), prev.get("built", "")))
 
+    # ── 청약 일정 보강 ──────────────────────────────────────────────
+    # 목록에는 마감일 정도만 있어 "언제부터 넣는지"를 알 수 없다.
+    # 진행 가능성이 있는 건만 상세를 열어 접수·발표 일정을 채운다.
+    try:
+        import schedule_enrich
+        schedule_enrich.enrich(rows, max_items=420, workers=8, log=log)
+    except Exception as e:
+        log("[!] 일정 보강 실패(계속 진행): %s" % e)
+
     seen, items = set(), []
     for r in rows:
         key = (r["agency"], r["title"], r.get("posted", ""))
@@ -89,6 +98,11 @@ def build(pages=3):
             "p": r.get("posted", ""),
             "d": r.get("deadline", ""),
             "s": r.get("status", ""),
+            # 청약 일정 (없으면 생략)
+            "rs": r.get("rs", ""), "re": r.get("re", ""),
+            "dr": r.get("dr", ""),
+            "ds": r.get("ds", ""), "de": r.get("de", ""),
+            "wr": r.get("wr", ""),
         })
     items.sort(key=lambda x: x["p"] or "", reverse=True)
 

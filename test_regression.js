@@ -74,6 +74,29 @@ if (fs.existsSync(distData)) {
   results.push({ ok: true, name: 'dist/data.json 없음 - 수집 검사 건너뜀', actual: 'skip', expected: 'skip' });
 }
 
+/* [회귀 8] 청약 일정 파서
+ * 2026-08-23 결함: 목록에 마감일만 있어 "언제부터 넣는지"를 알 수 없었다.
+ * 상세에서 일정을 뽑아 채우는데, 정답지(다산진건데시앙 공고문 PDF 실측)로 고정한다.
+ * 추가 결함: 상세조회 상한(220)에 걸려 뒤쪽 기관이 통째로 잘려 다산이 비었다. */
+if (fs.existsSync(distData)) {
+  const d = JSON.parse(fs.readFileSync(distData, 'utf8'));
+  const dasan = d.items.find(i => i.t.includes('다산진건') && i.ht === '장기전세');
+  if (dasan) {
+    const truth = { rs:'2026-08-24', re:'2026-08-26', dr:'2026-09-17',
+                    ds:'2026-09-21', de:'2026-09-28', wr:'2027-03-04' };
+    Object.entries(truth).forEach(([k, v]) =>
+      check(`다산 일정 ${k}`, dasan[k], v));
+  } else {
+    results.push({ ok:true, name:'다산 공고 없음(마감 경과) - 일정 검사 생략', actual:'skip', expected:'skip' });
+  }
+  const withSched = d.items.filter(i => i.rs || i.dr || i.wr);
+  checkTrue('일정 채워진 건 30건 이상', withSched.length >= 30, `${withSched.length}건`);
+  const badRange = d.items.filter(i => i.rs && i.re && i.rs > i.re);
+  check('접수 시작>종료 이상 0건', badRange.length, 0);
+  const badWr = d.items.filter(i => i.rs && i.wr && i.wr < i.rs);
+  check('당첨발표가 접수시작보다 빠른 이상 0건', badWr.length, 0);
+}
+
 /* [회귀 7] 터치타겟 44px — CSS에 min-height가 남아있는지 정적 검사
  * (실측은 브라우저에서, 여기서는 규칙이 삭제되지 않았는지만 지킨다) */
 const html = fs.readFileSync(path.join(ROOT, 'web', 'index.html'), 'utf8');
@@ -81,6 +104,11 @@ const html = fs.readFileSync(path.join(ROOT, 'web', 'index.html'), 'utf8');
   const i = html.indexOf(sel);
   const block = i >= 0 ? html.slice(i, i + 260) : '';
   checkTrue(`${sel} 44px 보장`, /min-height:44px|height:44px/.test(block), block ? '규칙 없음' : '셀렉터 없음');
+});
+
+/* [회귀 9] 단계 판정·현황 UI가 삭제되지 않았는지 */
+['function stage(', 'drawStatus(', "'접수예정'", "'발표대기'", 'class="stg', 'id="status"'].forEach(k => {
+  checkTrue(`UI 요소 유지: ${k}`, html.includes(k), '누락');
 });
 
 // ── 출력 ──────────────────────────────────────────────────────

@@ -149,6 +149,30 @@ header{
 .regrow input:focus,.num:focus{outline:none;border-color:var(--acc);
   box-shadow:0 0 0 3px rgba(29,78,216,.16)}
 
+/* 단계 배지 */
+.stg{font-size:11px;font-weight:800;padding:3px 8px;border-radius:6px;border:1px solid}
+.stg.open{color:#0b5c2e;border-color:#8ad2a7;background:linear-gradient(135deg,#e4f7ec,#cdedd8)}
+.stg.soon{color:#1e40af;border-color:#a9c4f5;background:linear-gradient(135deg,#e9f0fe,#d8e5fd)}
+.stg.doc,.stg.sub,.stg.wait{color:#8a4a00;border-color:#eec98a;background:linear-gradient(135deg,#fdf3e2,#fbe7c8)}
+.stg.done,.stg.unk{color:var(--tx3);border-color:var(--line);background:var(--panel2)}
+
+/* 일정 줄 */
+.sched{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.sv{font-size:11.5px;font-weight:600;color:var(--tx2);background:linear-gradient(135deg,#f4f8ff,#e9f0fb);
+    border:1px solid var(--line);border-radius:6px;padding:3px 8px}
+.sv i{font-style:normal;color:var(--tx3);font-weight:700;margin-right:5px}
+
+/* 실시간 현황 바 */
+.status{display:flex;flex-wrap:wrap;align-items:center;gap:4px;
+  margin:10px 12px 0;padding:11px 14px;border-radius:12px;
+  background:linear-gradient(135deg,#ffffff,#eef4ff);
+  border:1px solid var(--line);box-shadow:var(--shadow);
+  font-size:13px;font-weight:700;color:var(--tx2)}
+.status:empty{display:none}
+.status b{font-weight:800}
+.status .dot{color:var(--tx3);margin:0 6px;font-weight:400}
+.c-hot{color:#c81e1e}.c-ok{color:#0b5c2e}.c-acc{color:#1d4ed8}.c-tx2{color:var(--tx2)}
+
 .warnbox{background:linear-gradient(135deg,#fff8e6,#fdefcc);
   border:1px solid #e6c169;color:#7a4d00;border-radius:12px;
   padding:12px 14px;font-size:12.5px;line-height:1.7;margin:0 12px 10px;
@@ -192,6 +216,8 @@ header{
 </div>
 
 <div class="warnbox" id="warnbox"></div>
+
+<div class="status" id="status"></div>
 
 <div class="bar">
   <span><b id="cnt">0</b>건</span>
@@ -304,15 +330,72 @@ function score(r, allowDeal){
   return [Math.max(0,Math.min(100,s)), why];
 }
 
+/* ── 청약 단계 판정 ──────────────────────────────────────────
+   공고는 "떴다/마감" 두 상태가 아니라 아래 흐름을 탄다.
+     접수예정 -> 접수중 -> 서류발표대기 -> 서류제출 -> 당첨발표대기 -> 종료
+   상세에서 뽑은 일정(rs/re/dr/ds/de/wr)이 있으면 그걸로,
+   없으면 목록의 마감일(d)로 근사한다.
+   반환: {k:단계키, t:표시명, d:다음 이벤트까지 남은 일수, w:그 이벤트 이름} */
+function stage(r){
+  const D = s => { if(!s) return null; const t=new Date(s+'T00:00:00');
+    if(isNaN(t)) return null; const n=new Date(); n.setHours(0,0,0,0);
+    return Math.round((t-n)/864e5); };
+  const rs=D(r.rs), re=D(r.re), dr=D(r.dr), ds=D(r.ds), de=D(r.de), wr=D(r.wr);
+  const dl=D(r.d);
+
+  if(rs!==null && rs>0)              return {k:'soon', t:'접수예정', d:rs,  w:'접수시작'};
+  if(rs!==null && re!==null && rs<=0 && re>=0)
+                                      return {k:'open', t:'접수중',   d:re,  w:'접수마감'};
+  if(rs!==null && re===null && rs<=0 && (dl===null||dl>=0))
+                                      return {k:'open', t:'접수중',   d:dl,  w:'접수마감'};
+  if(re!==null && re<0 && dr!==null && dr>=0)
+                                      return {k:'doc',  t:'서류발표대기', d:dr, w:'서류발표'};
+  if(ds!==null && de!==null && ds<=0 && de>=0)
+                                      return {k:'sub',  t:'서류제출중', d:de, w:'제출마감'};
+  if(wr!==null && wr>=0 && (re===null||re<0))
+                                      return {k:'wait', t:'발표대기',  d:wr, w:'당첨발표'};
+  if(wr!==null && wr<0)              return {k:'done', t:'종료',      d:null, w:''};
+  // 일정 정보가 없을 때는 마감일로 근사
+  if(dl!==null && dl>=0)             return {k:'open', t:'접수중',   d:dl,  w:'마감'};
+  if(dl!==null && dl<0)              return {k:'done', t:'종료',      d:null, w:''};
+  return {k:'unk', t:'일정확인', d:null, w:''};
+}
+
 const TABS=[
-  ['추천',   r=>true,                                              null],
-  ['마감임박', r=>{const d=dday(r.d); return d!==null&&d>=0&&d<=10;}, null],
-  ['임대',   r=>r.dl.startsWith('임대'),                            null],
+  ['추천',    r=>true,                                             null],
+  ['접수중',  r=>stage(r).k==='open',                              null],
+  ['접수예정', r=>stage(r).k==='soon',                              null],
+  ['발표대기', r=>['doc','sub','wait'].includes(stage(r).k),         null],
+  ['마감임박', r=>{const st=stage(r); return st.k==='open'&&st.d!==null&&st.d>=0&&st.d<=7;}, null],
+  ['임대',    r=>r.dl.startsWith('임대'),                           null],
   ['매매·분양', r=>r.dl.startsWith('매매'),                          '매매(분양·매각)'],
-  ['상가',   r=>r.dl==='상가·업무',                                 '상가·업무'],
-  ['토지',   r=>r.dl==='토지',                                     '토지'],
-  ['전체',   r=>true,                                              null],
+  ['상가',    r=>r.dl==='상가·업무',                                '상가·업무'],
+  ['토지',    r=>r.dl==='토지',                                    '토지'],
+  ['전체',    r=>true,                                             null],
 ];
+
+/* 내 조건에 맞는 건들의 현재 상황 요약 — 지금 뭘 해야 하는지 한 줄로 */
+function drawStatus(){
+  if(!DATA) return;
+  const mine=DATA.items.filter(r=>{
+    if(r.k==='결과발표') return false;
+    const j=judge(r,P); if(j.v==='no') return false;
+    if(P.agency.length && !P.agency.includes(r.ag)) return false;
+    return score(r)[0] >= 40;
+  });
+  const st=mine.map(stage);
+  const open=st.filter(x=>x.k==='open').length;
+  const today=st.filter(x=>x.k==='open'&&x.d===0).length;
+  const soon=st.filter(x=>x.k==='soon').length;
+  const soon7=st.filter(x=>x.k==='soon'&&x.d<=7).length;
+  const wait=st.filter(x=>['doc','sub','wait'].includes(x.k)).length;
+  const parts=[];
+  if(today) parts.push(`<b class="c-hot">오늘 마감 ${today}</b>`);
+  parts.push(`<b class="c-ok">접수중 ${open}</b>`);
+  if(soon)  parts.push(`<b class="c-acc">곧 시작 ${soon}${soon7?` (7일내 ${soon7})`:''}</b>`);
+  if(wait)  parts.push(`<b class="c-tx2">발표대기 ${wait}</b>`);
+  $('#status').innerHTML = parts.join('<span class="dot">·</span>');
+}
 
 function render(){
   if(!DATA) return;
@@ -325,8 +408,7 @@ function render(){
     if(cut && (r.p||'') < cut) return false;
     if(P.agency.length && !P.agency.includes(r.ag)) return false;
     if(TAB!=='전체' && r.k==='결과발표') return false;
-    const dd=dday(r.d);
-    if(TAB!=='전체' && dd!==null && dd<0) return false;
+    if(TAB!=='전체' && stage(r).k==='done') return false;
     return tabFn(r);
   }).map(r=>{
     const [s,w]=score(r, allowDeal);
@@ -337,9 +419,15 @@ function render(){
   if(TAB!=='전체') rows=rows.filter(r=>r._s>=minsc);
   // 소득 초과(no)만 뒤로 보내고, 나머지는 적합도순. unknown은 "불가"가 아니라 "확인 필요"다.
   const rank={ok:0,maybe:0,unknown:0,no:1};
-  rows.sort((a,b)=> (rank[a._j.v]-rank[b._j.v]) || (b._s-a._s) || (b.p||'').localeCompare(a.p||''));
+  const sRank={open:0,soon:1,sub:2,doc:3,wait:4,unk:5,done:6};
+  rows.forEach(r=>r._st=stage(r));
+  rows.sort((a,b)=> (rank[a._j.v]-rank[b._j.v])
+                 || (sRank[a._st.k]-sRank[b._st.k])
+                 || (b._s-a._s)
+                 || (b.p||'').localeCompare(a.p||''));
 
   $('#cnt').textContent=rows.length;
+  drawStatus();
   const na=rows.filter(r=>r._d===null).length;
   $('#warnbox').style.display = na? 'block':'none';
   $('#warnbox').innerHTML = na? `SH·GH는 목록에 마감일이 없어 <b>${na}건이 마감일 미상</b>입니다. 카드를 눌러 원문에서 접수기간을 확인하세요. LH는 D-day가 정확합니다.`:'';
@@ -347,11 +435,13 @@ function render(){
   if(!rows.length){ $('#list').innerHTML='<div class="empty">조건에 맞는 공고가 없습니다.<br>기간을 늘리거나 적합도 기준을 낮춰보세요.</div>'; return; }
 
   $('#list').innerHTML = rows.slice(0,300).map(r=>{
+    const st=r._st||stage(r);
     let dd,cls;
-    if(r._d===null){dd='마감일 미상';cls='na';}
-    else if(r._d<=3){dd='D-'+r._d;cls='hot';}
-    else if(r._d<=10){dd='D-'+r._d;cls='warn';}
-    else {dd='D-'+r._d;cls='ok';}
+    if(st.d===null){dd = st.k==='unk' ? '일정 확인' : st.t; cls='na';}
+    else if(st.d===0){dd='오늘 '+st.w;cls='hot';}
+    else if(st.d<=3){dd='D-'+st.d+' '+st.w;cls='hot';}
+    else if(st.d<=10){dd='D-'+st.d+' '+st.w;cls='warn';}
+    else {dd='D-'+st.d+' '+st.w;cls='ok';}
     const g=r._s>=80?'a':r._s>=60?'b':r._s>=40?'c':'d';
     const isNew = LASTSEEN && (r.p||'')>LASTSEEN;
     const reg=[r.sd,r.gu].filter(Boolean).join(' ')||'지역미상';
@@ -361,6 +451,7 @@ function render(){
         <span class="sc ${g}">적합 ${r._s}</span>
         ${isNew?'<span class="new">NEW</span>':''}
         <span class="vd ${r._j.v}">${({ok:'신청가능',maybe:'조건부',no:'소득초과',unknown:'확인필요'})[r._j.v]}</span>
+        <span class="stg ${st.k}">${st.t}</span>
         <span class="dd ${cls}">${dd}</span>
       </div>
       <div class="ttl">${esc(r.t)}</div>
@@ -373,6 +464,12 @@ function render(){
       <div class="why">${r._w.map(esc).join(' · ')}</div>
       <div class="why" style="margin-top:5px;color:var(--tx3)">자격: ${esc(r._j.msg)}${r._a?' · 면적: '+esc(r._a.msg):''}</div>
       ${r._r&&r._r.v==='warn'?`<div class="why" style="margin-top:4px;color:#8a4a00;font-weight:600">⚠ ${esc(r._r.msg)}</div>`:''}
+      ${(r.rs||r.dr||r.wr)?`<div class="sched">
+        ${r.rs?`<span class="sv"><i>접수</i>${esc(r.rs.slice(5))}${r.re?'~'+esc(r.re.slice(5)):''}</span>`:''}
+        ${r.dr?`<span class="sv"><i>서류발표</i>${esc(r.dr.slice(5))}</span>`:''}
+        ${r.ds?`<span class="sv"><i>서류제출</i>${esc(r.ds.slice(5))}${r.de?'~'+esc(r.de.slice(5)):''}</span>`:''}
+        ${r.wr?`<span class="sv"><i>당첨발표</i>${esc(r.wr.slice(2))}</span>`:''}
+      </div>`:''}
       <div class="dts"><span>게시 ${esc(r.p||'-')}</span>${r.d?`<span>마감 ${esc(r.d)}</span>`:''}</div>
     </a>`;
   }).join('');
