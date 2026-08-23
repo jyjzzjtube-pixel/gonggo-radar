@@ -281,8 +281,25 @@ def collect_gh_apply(pages=1, sleep=0.6, log=print):
     return out
 
 
-COLLECTORS = [("LH", collect_lh), ("SH", collect_sh), ("GH", collect_gh),
+def collect_lh_best(pages=3, sleep=0.6, log=print):
+    """LH는 공식 OpenAPI를 우선 쓰고, 키가 없거나 실패하면 웹 파싱으로 폴백한다.
+    apply.lh.or.kr이 CI IP에서 간헐적으로 timeout 나는 문제를 API가 우회해준다."""
+    try:
+        import lh_api
+        rows = lh_api.collect(pages=max(2, pages), log=log)
+        if rows:
+            log("  [LH] 공식 API 사용 (%d건)" % len(rows))
+            return rows
+    except Exception as e:
+        log("  [LH API] 모듈 오류: %s" % e)
+    log("  [LH] 웹 파싱으로 수집")
+    return collect_lh(pages=pages, sleep=sleep, log=log)
+
+
+COLLECTORS = [("LH", collect_lh_best), ("SH", collect_sh), ("GH", collect_gh),
               ("GH청약센터", collect_gh_apply)]
+
+
 
 
 def collect_all(pages=3, log=print):

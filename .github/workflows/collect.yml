@@ -36,6 +36,9 @@ jobs:
 
       - name: LH·SH·GH 수집 및 정적 빌드
         run: python build_static.py 3
+        env:
+          # 공공데이터포털 LH OpenAPI 키. 없으면 자동으로 웹 파싱으로 폴백한다.
+          DATA_GO_KR_KEY: ${{ secrets.DATA_GO_KR_KEY }}
 
       - name: 회귀검사 (실패 시 배포 중단)
         run: node test_regression.js
