@@ -89,6 +89,19 @@ header{position:sticky;top:0;z-index:30;background:rgba(15,18,22,.94);backdrop-f
               border-radius:8px;padding:9px 11px;font:inherit;font-size:13.5px}
 .warnbox{background:#1a1508;border:1px solid #55430f;color:#dcc287;border-radius:10px;
          padding:10px 12px;font-size:11.5px;line-height:1.6;margin:0 12px 10px}
+
+/* 앱 설치 배너 */
+.install{display:none;align-items:center;gap:11px;margin:10px 12px 0;padding:12px 14px;
+  background:linear-gradient(135deg,#15325e,#1d2b45);border:1px solid #2f5490;border-radius:12px}
+.install.on{display:flex}
+.install .ic{width:38px;height:38px;border-radius:10px;background:var(--acc);display:grid;
+  place-items:center;font-size:19px;flex:none}
+.install .tx{flex:1;min-width:0}
+.install .tx b{display:block;font-size:13.5px;font-weight:700}
+.install .tx span{font-size:11.5px;color:#a8c4ea;line-height:1.5}
+.install button{background:var(--acc);border:0;color:#fff;font:inherit;font-weight:700;font-size:13px;
+  padding:9px 15px;border-radius:9px;flex:none;cursor:pointer}
+.install .x{background:transparent;color:#7f9bc4;font-size:17px;padding:4px 6px;font-weight:400}
 </style>
 </head>
 <body>
@@ -102,6 +115,13 @@ header{position:sticky;top:0;z-index:30;background:rgba(15,18,22,.94);backdrop-f
   <div class="built" id="built">불러오는 중…</div>
   <div class="tabs" id="tabs"></div>
 </header>
+
+<div class="install" id="install">
+  <div class="ic">📡</div>
+  <div class="tx"><b id="insTtl">앱으로 설치하기</b><span id="insSub">홈 화면에 추가하면 앱처럼 바로 열립니다</span></div>
+  <button id="insBtn">설치</button>
+  <button class="x" id="insX">✕</button>
+</div>
 
 <div class="warnbox" id="warnbox"></div>
 
@@ -168,7 +188,8 @@ function dday(d){ if(!d) return null;
   return Math.round((t-n)/864e5); }
 
 // 서버(store.py match_score)와 동일한 규칙
-function score(r){
+// allowDeal: 특정 거래유형 탭을 직접 열었을 때는 그 유형을 제외대상으로 감점하지 않는다
+function score(r, allowDeal){
   let s=0, why=[];
   const gu=r.gu||'', sd=r.sd||'';
   if(P.regions.length){
@@ -182,7 +203,7 @@ function score(r){
     else { s-=20; why.push(`희망지역 밖(${sd} ${gu})`); }
   } else s+=20;
 
-  if(!P.deals.length||P.deals.includes(r.dl)){ s+=20; why.push(`거래유형 ${r.dl}`); }
+  if(!P.deals.length||P.deals.includes(r.dl)||allowDeal===r.dl){ s+=20; why.push(`거래유형 ${r.dl}`); }
   else { s-=40; why.push(`※제외대상(${r.dl})`); }
 
   const hit=(r.q||[]).filter(q=>P.quals.includes(q));
@@ -202,20 +223,21 @@ function score(r){
 }
 
 const TABS=[
-  ['추천',   r=>true],
-  ['마감임박', r=>{const d=dday(r.d); return d!==null&&d>=0&&d<=10;}],
-  ['임대',   r=>r.dl.startsWith('임대')],
-  ['매매·분양', r=>r.dl.startsWith('매매')],
-  ['상가',   r=>r.dl==='상가·업무'],
-  ['토지',   r=>r.dl==='토지'],
-  ['전체',   r=>true],
+  ['추천',   r=>true,                                              null],
+  ['마감임박', r=>{const d=dday(r.d); return d!==null&&d>=0&&d<=10;}, null],
+  ['임대',   r=>r.dl.startsWith('임대'),                            null],
+  ['매매·분양', r=>r.dl.startsWith('매매'),                          '매매(분양·매각)'],
+  ['상가',   r=>r.dl==='상가·업무',                                 '상가·업무'],
+  ['토지',   r=>r.dl==='토지',                                     '토지'],
+  ['전체',   r=>true,                                              null],
 ];
 
 function render(){
   if(!DATA) return;
   const days=+$('#days').value, minsc=+$('#minsc').value;
   const cut = days ? new Date(Date.now()-days*864e5).toISOString().slice(0,10) : '';
-  const tabFn = (TABS.find(t=>t[0]===TAB)||TABS[0])[1];
+  const tabDef = TABS.find(t=>t[0]===TAB)||TABS[0];
+  const tabFn = tabDef[1], allowDeal = tabDef[2];
 
   let rows = DATA.items.filter(r=>{
     if(cut && (r.p||'') < cut) return false;
@@ -224,7 +246,7 @@ function render(){
     const dd=dday(r.d);
     if(TAB!=='전체' && dd!==null && dd<0) return false;
     return tabFn(r);
-  }).map(r=>{ const [s,w]=score(r); return {...r, _s:s, _w:w, _d:dday(r.d)}; });
+  }).map(r=>{ const [s,w]=score(r, allowDeal); return {...r, _s:s, _w:w, _d:dday(r.d)}; });
 
   if(TAB!=='전체') rows=rows.filter(r=>r._s>=minsc);
   rows.sort((a,b)=> b._s-a._s || (b.p||'').localeCompare(a.p||''));
@@ -323,6 +345,46 @@ async function load(bust){
 }
 load();
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+
+/* ── 앱 설치 ───────────────────────────────────────────────
+   안드로이드(크롬·삼성인터넷): beforeinstallprompt 로 원터치 설치
+   아이폰(사파리): 해당 이벤트가 없으므로 공유→홈 화면에 추가 안내 */
+let deferred=null;
+const installed = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+const dismissed = localStorage.getItem('radar_ins_x')==='1';
+
+function showInstall(mode){
+  if(installed || dismissed) return;
+  const box=$('#install');
+  if(mode==='ios'){
+    $('#insTtl').textContent='홈 화면에 추가';
+    $('#insSub').innerHTML='사파리 하단 <b>공유</b> ⇧ → <b>홈 화면에 추가</b>를 누르세요';
+    $('#insBtn').style.display='none';
+  }
+  box.classList.add('on');
+}
+
+window.addEventListener('beforeinstallprompt', e=>{
+  e.preventDefault(); deferred=e; showInstall('android');
+});
+$('#insBtn').onclick = async ()=>{
+  if(!deferred) return;
+  deferred.prompt();
+  const r = await deferred.userChoice;
+  deferred=null;
+  if(r.outcome==='accepted') $('#install').classList.remove('on');
+};
+$('#insX').onclick = ()=>{
+  localStorage.setItem('radar_ins_x','1');
+  $('#install').classList.remove('on');
+};
+window.addEventListener('appinstalled', ()=>$('#install').classList.remove('on'));
+
+// iOS 사파리 판별 (beforeinstallprompt 미지원)
+const ua=navigator.userAgent;
+if(/iPhone|iPad|iPod/.test(ua) && /Safari/.test(ua) && !/CriOS|FxiOS/.test(ua)){
+  setTimeout(()=>{ if(!deferred) showInstall('ios'); }, 1200);
+}
 </script>
 </body>
 </html>

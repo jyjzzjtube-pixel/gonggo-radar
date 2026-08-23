@@ -1,17 +1,44 @@
-const C='radar-v1';
-const ASSETS=['./','./index.html','./manifest.json'];
-self.addEventListener('install',e=>{self.skipWaiting();
-  e.waitUntil(caches.open(C).then(c=>c.addAll(ASSETS)).catch(()=>{}))});
-self.addEventListener('activate',e=>{e.waitUntil(
-  caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==C).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});
-self.addEventListener('fetch',e=>{
-  const u=new URL(e.request.url);
-  if(u.pathname.endsWith('data.json')){
-    // 데이터는 네트워크 우선, 실패 시 캐시(오프라인에서도 마지막 목록 열람)
-    e.respondWith(fetch(e.request).then(r=>{
-      const cp=r.clone(); caches.open(C).then(c=>c.put(e.request,cp)); return r;
-    }).catch(()=>caches.match(e.request)));
+/* 공공공고 레이더 서비스워커
+   HTML/JSON = 네트워크 우선(배포 즉시 반영, 오프라인이면 캐시)
+   아이콘 등 정적 자산 = 캐시 우선 */
+const C = 'radar-v2';
+const PRECACHE = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
+
+self.addEventListener('install', e => {
+  self.skipWaiting();
+  e.waitUntil(caches.open(C).then(c => c.addAll(PRECACHE)).catch(() => {}));
+});
+
+self.addEventListener('activate', e => {
+  e.waitUntil(
+    caches.keys()
+      .then(ks => Promise.all(ks.filter(k => k !== C).map(k => caches.delete(k))))
+      .then(() => self.clients.claim())
+  );
+});
+
+function networkFirst(req) {
+  return fetch(req).then(r => {
+    const cp = r.clone();
+    caches.open(C).then(c => c.put(req, cp));
+    return r;
+  }).catch(() => caches.match(req).then(r => r || caches.match('./index.html')));
+}
+
+self.addEventListener('fetch', e => {
+  const req = e.request;
+  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
+  if (url.origin !== location.origin) return;   // 외부 공고 원문은 건드리지 않는다
+
+  const isHTML = req.mode === 'navigate' ||
+                 url.pathname.endsWith('/') ||
+                 url.pathname.endsWith('.html');
+  const isData = url.pathname.endsWith('data.json');
+
+  if (isHTML || isData) {
+    e.respondWith(networkFirst(req));
   } else {
-    e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)));
+    e.respondWith(caches.match(req).then(r => r || fetch(req)));
   }
 });

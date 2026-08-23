@@ -1,5 +1,5 @@
 __pycache__/
 *.pyc
 data/
-dist/data.json
+dist/
 .claude/
