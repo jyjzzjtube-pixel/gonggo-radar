@@ -379,7 +379,8 @@ $('#sheet').onclick=e=>{ if(e.target.id==='sheet') $('#sheet').classList.remove(
 
 async function load(bust){
   try{
-    const r=await fetch('data.json'+(bust?'?t='+Date.now():''),{cache:bust?'reload':'default'});
+    // 배포 직후에도 항상 최신 데이터를 받도록 매 요청에 캐시버스터를 붙인다
+    const r=await fetch('data.json?t='+Date.now(),{cache:'no-store'});
     DATA=await r.json();
     const b=(DATA.built||'').replace('T',' ').slice(0,16);
     $('#built').innerHTML=`3사 통합 <b>${DATA.count}</b>건 · 자동수집 ${b}`
