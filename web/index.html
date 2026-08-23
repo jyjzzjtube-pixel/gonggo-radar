@@ -383,8 +383,19 @@ async function load(bust){
     const r=await fetch('data.json?t='+Date.now(),{cache:'no-store'});
     DATA=await r.json();
     const b=(DATA.built||'').replace('T',' ').slice(0,16);
+    const st=DATA.stale||{};
+    const stKeys=Object.keys(st);
     $('#built').innerHTML=`3사 통합 <b>${DATA.count}</b>건 · 자동수집 ${b}`
+      + (stKeys.length?` · <span style="color:#f59e0b">${stKeys.join('·')} 갱신지연</span>`:'')
       + (DATA.errors&&DATA.errors.length?` · <span style="color:#ef4444">수집오류 ${DATA.errors.length}건</span>`:'');
+    if(stKeys.length){
+      const w=stKeys.map(k=>`${k} ${st[k].count}건은 ${(st[k].asof||'').replace('T',' ').slice(0,16)} 기준`).join(', ');
+      const box=document.createElement('div');
+      box.className='warnbox';
+      box.style.cssText='background:#2a1a08;border-color:#7a5210;color:#f0c27b';
+      box.innerHTML=`⚠ ${w}입니다. 해당 기관이 서버 자동수집을 차단해 직전 데이터를 그대로 보여줍니다. 최신 여부는 원문에서 확인하세요.`;
+      document.querySelector('.bar').before(box);
+    }
     render();
     const newest=DATA.items.map(x=>x.p||'').sort().pop()||'';
     if(newest) localStorage.setItem('radar_seen',newest);

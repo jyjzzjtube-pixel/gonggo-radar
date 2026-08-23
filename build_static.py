@@ -14,6 +14,31 @@ DIST = BASE / "dist"
 WEB = BASE / "web"
 
 
+LIVE_URL = "https://jyjzzjtube-pixel.github.io/gonggo-radar/data.json"
+
+
+def _load_previous(log):
+    """직전에 배포된 data.json을 가져온다(로컬 dist 우선, 없으면 라이브)."""
+    local = DIST / "data.json"
+    if local.exists():
+        try:
+            d = json.loads(local.read_text(encoding="utf-8"))
+            if d.get("items"):
+                log("    직전 데이터: 로컬 dist (%s)" % d.get("built", ""))
+                return d
+        except Exception as e:
+            log("    로컬 dist 읽기 실패: %s" % e)
+    try:
+        import urllib.request
+        with urllib.request.urlopen(LIVE_URL + "?t=build", timeout=30) as r:
+            d = json.loads(r.read().decode("utf-8"))
+        log("    직전 데이터: 라이브 (%s)" % d.get("built", ""))
+        return d
+    except Exception as e:
+        log("    라이브 읽기 실패: %s" % e)
+    return None
+
+
 def build(pages=3):
     lines = []
 
@@ -22,6 +47,28 @@ def build(pages=3):
         lines.append(str(m))
 
     rows, errors = collectors.collect_all(pages=pages, log=log)
+
+    # ── 차단된 기관 데이터 보존 ─────────────────────────────────────────
+    # LH(apply.lh.or.kr)는 GitHub Actions runner IP를 차단한다(connect timeout).
+    # 그 기관이 0건이면 마지막으로 배포된 data.json에서 항목을 되살려
+    # 데이터가 통째로 사라지는 것을 막고, 낡았다는 사실을 payload에 남긴다.
+    stale = {}
+    got_agencies = {r["agency"] for r in rows}
+    missing = [a for a in ("LH", "SH", "GH") if a not in got_agencies]
+    if missing:
+        log("[!] 수집 실패 기관: %s -> 직전 배포분에서 복원 시도" % missing)
+        prev = _load_previous(log)
+        if prev:
+            for a in missing:
+                keep = [i for i in prev.get("items", []) if i.get("ag") == a]
+                if keep:
+                    for i in keep:
+                        rows.append(dict(agency=i["ag"], menu="", category=i.get("ht", ""),
+                                         title=i.get("t", ""), url=i.get("u", ""),
+                                         region_hint=i.get("sd", ""), posted=i.get("p", ""),
+                                         deadline=i.get("d", ""), status=i.get("s", "")))
+                    stale[a] = {"count": len(keep), "asof": prev.get("built", "")}
+                    log("    %s %d건 복원 (기준 %s)" % (a, len(keep), prev.get("built", "")))
 
     seen, items = set(), []
     for r in rows:
@@ -51,6 +98,7 @@ def build(pages=3):
                  .isoformat(timespec="seconds"),
         "count": len(items),
         "errors": errors,
+        "stale": stale,          # 갱신 실패해 직전 데이터를 재사용한 기관
         "items": items,
     }
     (DIST / "data.json").write_text(
