@@ -6,6 +6,7 @@
 <meta name="theme-color" content="#0f1216">
 <title>공공공고 레이더</title>
 <link rel="manifest" href="manifest.json">
+<script src="eligibility.js"></script>
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -57,6 +58,14 @@ header{position:sticky;top:0;z-index:30;background:rgba(15,18,22,.94);backdrop-f
 .sc.b{color:#a3e635;border-color:#4d5c1d;background:#1b2410}
 .sc.c{color:#f59e0b;border-color:#68491a;background:#241c0f}
 .sc.d{color:var(--tx3);border-color:var(--line)}
+.vd{font-size:10.5px;font-weight:800;padding:2px 7px;border-radius:5px;border:1px solid}
+.vd.ok{color:#22c55e;border-color:#1d5c33;background:#0f2417}
+.vd.maybe{color:#f59e0b;border-color:#68491a;background:#241c0f}
+.vd.no{color:#ef4444;border-color:#5b2626;background:#240f0f}
+.vd.unknown{color:var(--tx3);border-color:var(--line)}
+.card.dim{opacity:.5}
+.num{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--tx);
+     border-radius:8px;padding:9px 11px;font:inherit;font-size:13.5px}
 .new{font-size:10px;font-weight:800;color:#fff;background:var(--hot);padding:2px 6px;border-radius:5px}
 .dd{margin-left:auto;font-size:13px;font-weight:800}
 .dd.hot{color:var(--hot)}.dd.warn{color:var(--warn)}.dd.ok{color:var(--tx2)}.dd.na{color:var(--tx3);font-size:11.5px;font-weight:600}
@@ -154,6 +163,13 @@ header{position:sticky;top:0;z-index:30;background:rgba(15,18,22,.94);backdrop-f
     <div class="regrow"><input id="regIn" placeholder="예: 구리, 남양주, 중랑"><button class="iconbtn" id="regAdd">+</button></div>
     <div class="chips" id="pRegions"></div>
 
+    <h4>월 소득 (부부합산, 만원)</h4>
+    <input class="num" id="pIncome" type="number" inputmode="numeric" placeholder="예: 1000">
+    <h4>맞벌이 여부</h4><div class="chips" id="pDual"></div>
+    <h4>가구원수</h4><div class="chips" id="pHouse"></div>
+    <h4>최소 전용면적 (㎡)</h4>
+    <input class="num" id="pArea" type="number" inputmode="numeric" placeholder="예: 59">
+
     <h4>거래 유형</h4><div class="chips" id="pDeals"></div>
     <h4>자격 (해당되는 것)</h4><div class="chips" id="pQuals"></div>
     <h4>기관</h4><div class="chips" id="pAgency"></div>
@@ -175,7 +191,13 @@ const DEF={
   regions:["구리","남양주","의정부","중랑","광진","동대문","노원"],
   deals:["임대(전세)","임대(월세)","매매(분양·매각)"],
   quals:["신혼·신생아","청년","일반"],
-  agency:[]
+  agency:[],
+  income:10000000,   // 월 부부합산
+  dual:true,         // 맞벌이 (확인 필요)
+  household:2,
+  minArea:59,
+  liveSido:"경기",   // 현재 거주 시도 (구리시)
+  hideNo:true        // 소득 초과 건 숨김
 };
 let P = JSON.parse(localStorage.getItem('radar_pref')||'null') || structuredClone(DEF);
 let DATA=null, TAB='추천';
@@ -246,10 +268,16 @@ function render(){
     const dd=dday(r.d);
     if(TAB!=='전체' && dd!==null && dd<0) return false;
     return tabFn(r);
-  }).map(r=>{ const [s,w]=score(r, allowDeal); return {...r, _s:s, _w:w, _d:dday(r.d)}; });
+  }).map(r=>{
+    const [s,w]=score(r, allowDeal);
+    const j=judge(r,P), a=areaHint(r,P.minArea), res=residencyHint(r,P);
+    return {...r, _s:s, _w:w, _d:dday(r.d), _j:j, _a:a, _r:res};
+  }).filter(r=> !(P.hideNo && (r._j.v==='no' || (r._a&&r._a.v==='no'))) );
 
   if(TAB!=='전체') rows=rows.filter(r=>r._s>=minsc);
-  rows.sort((a,b)=> b._s-a._s || (b.p||'').localeCompare(a.p||''));
+  // 소득 초과(no)만 뒤로 보내고, 나머지는 적합도순. unknown은 "불가"가 아니라 "확인 필요"다.
+  const rank={ok:0,maybe:0,unknown:0,no:1};
+  rows.sort((a,b)=> (rank[a._j.v]-rank[b._j.v]) || (b._s-a._s) || (b.p||'').localeCompare(a.p||''));
 
   $('#cnt').textContent=rows.length;
   const na=rows.filter(r=>r._d===null).length;
@@ -267,11 +295,12 @@ function render(){
     const g=r._s>=80?'a':r._s>=60?'b':r._s>=40?'c':'d';
     const isNew = LASTSEEN && (r.p||'')>LASTSEEN;
     const reg=[r.sd,r.gu].filter(Boolean).join(' ')||'지역미상';
-    return `<a class="card ${r.ag}" href="${esc(r.u)}" target="_blank" rel="noopener">
+    return `<a class="card ${r.ag}${r._j.v==='no'?' dim':''}" href="${esc(r.u)}" target="_blank" rel="noopener">
       <div class="top">
         <span class="ag ${r.ag}">${r.ag}</span>
         <span class="sc ${g}">적합 ${r._s}</span>
         ${isNew?'<span class="new">NEW</span>':''}
+        <span class="vd ${r._j.v}">${({ok:'신청가능',maybe:'조건부',no:'소득초과',unknown:'확인필요'})[r._j.v]}</span>
         <span class="dd ${cls}">${dd}</span>
       </div>
       <div class="ttl">${esc(r.t)}</div>
@@ -282,6 +311,8 @@ function render(){
         ${(r.q||[]).map(q=>`<span class="tg ql">${esc(q)}</span>`).join('')}
       </div>
       <div class="why">${r._w.map(esc).join(' · ')}</div>
+      <div class="why" style="margin-top:4px;color:#8b9aab">자격: ${esc(r._j.msg)}${r._a?' · 면적: '+esc(r._a.msg):''}</div>
+      ${r._r&&r._r.v==='warn'?`<div class="why" style="margin-top:3px;color:#e0a355">⚠ ${esc(r._r.msg)}</div>`:''}
       <div class="dts"><span>게시 ${esc(r.p||'-')}</span>${r.d?`<span>마감 ${esc(r.d)}</span>`:''}</div>
     </a>`;
   }).join('');
@@ -305,6 +336,22 @@ function drawPref(){
   chips($('#pDeals'),DEALS,P.deals);
   chips($('#pQuals'),QUALS,P.quals);
   chips($('#pAgency'),AGENCIES,P.agency);
+  $('#pIncome').value = P.income ? Math.round(P.income/10000) : '';
+  $('#pArea').value   = P.minArea || '';
+  const dualEl=$('#pDual');
+  dualEl.innerHTML=['맞벌이','외벌이'].map(v=>
+    `<div class="chip${(v==='맞벌이')===!!P.dual?' on':''}" data-v="${v}">${v}</div>`).join('');
+  dualEl.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{
+    P.dual = c.dataset.v==='맞벌이';
+    dualEl.querySelectorAll('.chip').forEach(x=>x.classList.toggle('on', (x.dataset.v==='맞벌이')===P.dual));
+  });
+  const hEl=$('#pHouse');
+  hEl.innerHTML=[1,2,3,4,5].map(n=>
+    `<div class="chip${n===+P.household?' on':''}" data-v="${n}">${n}인</div>`).join('');
+  hEl.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{
+    P.household=+c.dataset.v;
+    hEl.querySelectorAll('.chip').forEach(x=>x.classList.toggle('on', +x.dataset.v===P.household));
+  });
 }
 
 $('#tabs').innerHTML=TABS.map((t,i)=>`<div class="tab${i===0?' on':''}" data-t="${t[0]}">${t[0]}</div>`).join('');
@@ -316,6 +363,8 @@ $('#days').onchange=render; $('#minsc').onchange=render;
 $('#btnPref').onclick=()=>{drawPref();$('#sheet').classList.add('on');};
 $('#btnClose').onclick=()=>$('#sheet').classList.remove('on');
 $('#btnSave').onclick=()=>{
+  P.income  = (+$('#pIncome').value||0)*10000;
+  P.minArea = +$('#pArea').value||0;
   localStorage.setItem('radar_pref',JSON.stringify(P));
   $('#sheet').classList.remove('on'); render();
 };
