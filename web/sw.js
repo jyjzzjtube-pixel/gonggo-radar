@@ -1,8 +1,8 @@
 /* 공공공고 레이더 서비스워커
    HTML/JSON = 네트워크 우선(배포 즉시 반영, 오프라인이면 캐시)
    아이콘 등 정적 자산 = 캐시 우선 */
-const C = 'radar-v3';
-const PRECACHE = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
+const C = 'radar-v4';
+const PRECACHE = ['./', './index.html', './manifest.json', './icon-180.png', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
   self.skipWaiting();

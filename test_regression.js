@@ -111,6 +111,51 @@ const html = fs.readFileSync(path.join(ROOT, 'web', 'index.html'), 'utf8');
   checkTrue(`UI 요소 유지: ${k}`, html.includes(k), '누락');
 });
 
+/* [회귀 10] 아이폰 설치 지원
+ * iOS는 beforeinstallprompt가 없어 안내 UI가 유일한 경로다. 이게 지워지면 아이폰에서 설치 불가.
+ * iPadOS 13+는 UA가 Macintosh로 나와 maxTouchPoints로만 구분된다. */
+[['apple-touch-icon', 'icon-180.png'], ['apple-mobile-web-app-capable', 'yes'],
+ ['apple-mobile-web-app-title', '공고레이더'],
+ ['apple-mobile-web-app-status-bar-style', 'default']].forEach(([k, v]) => {
+  const i = html.indexOf(k);
+  checkTrue(`iOS 메타 ${k}`, i >= 0 && html.slice(i, i + 140).includes(v), '누락/불일치');
+});
+['function platform(', 'maxTouchPoints', 'navigator.standalone',
+ 'class="shr"', "'inapp'"].forEach(k => checkTrue(`iOS 로직 유지: ${k}`, html.includes(k), '누락'));
+{  // 주석이 아니라 meta 태그의 실제 content 값을 본다
+  const m = html.match(/name="apple-mobile-web-app-status-bar-style"\s+content="([^"]+)"/);
+  check('iOS 상태바 스타일(밝은 테마용)', m && m[1], 'default');
+}
+
+// 아이콘 파일 존재 + 알파 없음(iOS는 투명하면 검게 칠함)
+['icon-180.png', 'icon-192.png', 'icon-512.png'].forEach(f => {
+  const fp = path.join(ROOT, 'web', f);
+  const ok = fs.existsSync(fp);
+  checkTrue(`아이콘 ${f} 존재`, ok, '없음');
+  if (ok) {
+    const b = fs.readFileSync(fp);
+    // PNG IHDR의 color type: 2=RGB(알파없음), 6=RGBA
+    checkTrue(`${f} 알파 없음(iOS 대응)`, b[25] === 2, `colorType=${b[25]}`);
+  }
+});
+
+// 플랫폼 판별 로직을 실제 UA로 검증
+const pf = (ua, touch) => {
+  const iOSUA = /iPhone|iPad|iPod/.test(ua);
+  const iPadOS = /Macintosh/.test(ua) && touch > 1;
+  const isIOS = iOSUA || iPadOS;
+  const inApp = /CriOS|FxiOS|EdgiOS|NAVER|KAKAO|Instagram|FBAN|FBAV|Line/i.test(ua);
+  return { isIOS, isSafari: isIOS && !inApp };
+};
+[['아이폰 사파리', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) Version/17.5 Mobile Safari/604.1', 5, true, true],
+ ['아이폰 카카오', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) KAKAOTALK 10.0', 5, true, false],
+ ['아이패드OS', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Version/17.5 Safari/605.1.15', 5, true, true],
+ ['진짜 맥', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Version/17.5 Safari/605.1.15', 0, false, false],
+].forEach(([n, ua, t, eIOS, eSafari]) => {
+  const g = pf(ua, t);
+  check(`플랫폼 판별: ${n}`, [g.isIOS, g.isSafari], [eIOS, eSafari]);
+});
+
 // ── 출력 ──────────────────────────────────────────────────────
 console.log('회귀검사 — 공공공고 레이더\n' + '='.repeat(58));
 results.forEach(r => {

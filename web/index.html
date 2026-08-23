@@ -7,9 +7,14 @@
 <title>공공공고 레이더</title>
 <link rel="manifest" href="manifest.json">
 <script src="eligibility.js"></script>
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="apple-touch-icon" sizes="180x180" href="icon-180.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<!-- 밝은 테마이므로 상태바는 default(어두운 글자). 반투명 계열은 흰 배경에서 글자가 안 보인다 -->
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="공고레이더">
+<meta name="format-detection" content="telephone=no">
 <style>
 :root{
   /* 밝은 배경 + 높은 대비. 본문 대비 12:1 이상을 목표로 잡았다. */
@@ -194,6 +199,17 @@ header{
   border-radius:11px;flex:none;cursor:pointer;box-shadow:0 3px 10px rgba(29,78,216,.3)}
 .install .x{background:transparent;color:#4d6ea6;font-size:18px;padding:4px 6px;
   font-weight:500;box-shadow:none;min-height:44px}
+/* 아이폰 안내 배너는 버튼이 없어 설명 폭을 넓게 쓴다 */
+.install.ios .tx span{font-size:12.5px;line-height:1.6}
+.install.ios .tx b{font-size:14px}
+/* iOS 공유 아이콘(네모에서 화살표가 위로) 모사 */
+.shr{display:inline-block;width:15px;height:17px;vertical-align:-4px;margin:0 1px;
+  border:1.8px solid #1d4ed8;border-top:none;border-radius:0 0 3px 3px;position:relative;
+  font-size:0;color:transparent}
+.shr::before{content:'';position:absolute;left:50%;top:-9px;transform:translateX(-50%);
+  width:1.8px;height:11px;background:#1d4ed8}
+.shr::after{content:'';position:absolute;left:50%;top:-9px;transform:translateX(-50%) rotate(45deg);
+  width:7px;height:7px;border-left:1.8px solid #1d4ed8;border-top:1.8px solid #1d4ed8}
 </style>
 </head>
 <body>
@@ -600,16 +616,40 @@ setInterval(()=>autoRefresh('interval'), REFRESH_MS);
    안드로이드(크롬·삼성인터넷): beforeinstallprompt 로 원터치 설치
    아이폰(사파리): 해당 이벤트가 없으므로 공유→홈 화면에 추가 안내 */
 let deferred=null;
-const installed = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+
+/* 플랫폼 판별
+   iPadOS 13+ 는 UA가 Macintosh로 나와서 /iPad/ 로는 못 잡는다.
+   터치 지점 수로 구분한다. */
+function platform(){
+  const ua = navigator.userAgent;
+  const iOSUA = /iPhone|iPad|iPod/.test(ua);
+  const iPadOS = /Macintosh/.test(ua) && navigator.maxTouchPoints > 1;
+  const isIOS = iOSUA || iPadOS;
+  // iOS에서 홈 화면 추가는 Safari에서만 된다. 크롬·파폭·네이버앱 등은 불가.
+  const inAppBrowser = /CriOS|FxiOS|EdgiOS|NAVER|KAKAO|Instagram|FBAN|FBAV|Line/i.test(ua);
+  return { isIOS, isSafari: isIOS && !inAppBrowser, inAppBrowser,
+           isAndroid: /Android/.test(ua) };
+}
+const PF = platform();
+const installed = window.matchMedia('(display-mode: standalone)').matches
+               || navigator.standalone === true;
 const dismissed = localStorage.getItem('radar_ins_x')==='1';
 
 function showInstall(mode){
   if(installed || dismissed) return;
   const box=$('#install');
   if(mode==='ios'){
-    $('#insTtl').textContent='홈 화면에 추가';
-    $('#insSub').innerHTML='사파리 하단 <b>공유</b> ⇧ → <b>홈 화면에 추가</b>를 누르세요';
+    // 아이폰은 자동 설치 프롬프트가 없다. 공유 시트 경로를 그림처럼 알려준다.
+    $('#insTtl').textContent='아이폰에 앱으로 설치';
+    $('#insSub').innerHTML=
+      '아래 <b>공유<span class="shr"></span></b> → <b>홈 화면에 추가</b>';
     $('#insBtn').style.display='none';
+    box.classList.add('ios');
+  } else if(mode==='inapp'){
+    $('#insTtl').textContent='Safari로 열어주세요';
+    $('#insSub').innerHTML='카카오·네이버 앱에서는 안 됩니다. <b>Safari</b>로 여세요';
+    $('#insBtn').style.display='none';
+    box.classList.add('ios');
   }
   box.classList.add('on');
 }
@@ -630,10 +670,13 @@ $('#insX').onclick = ()=>{
 };
 window.addEventListener('appinstalled', ()=>$('#install').classList.remove('on'));
 
-// iOS 사파리 판별 (beforeinstallprompt 미지원)
-const ua=navigator.userAgent;
-if(/iPhone|iPad|iPod/.test(ua) && /Safari/.test(ua) && !/CriOS|FxiOS/.test(ua)){
-  setTimeout(()=>{ if(!deferred) showInstall('ios'); }, 1200);
+/* 아이폰·아이패드: beforeinstallprompt가 없으므로 직접 안내한다.
+   Safari면 설치 방법을, 인앱 브라우저면 Safari로 열라고 알린다. */
+if(PF.isIOS && !installed && !dismissed){
+  setTimeout(()=>{
+    if(deferred) return;                       // 혹시 프롬프트가 오면 그쪽 우선
+    showInstall(PF.isSafari ? 'ios' : 'inapp');
+  }, 900);
 }
 </script>
 </body>
